@@ -18,9 +18,63 @@ import {
   Monitor,
   CreditCard
 } from "lucide-react";
-import { useState, useRef, FormEvent } from "react";
+import { useState, useRef, FormEvent, useEffect } from "react";
+import { db } from "./firebase";
+import { doc, setDoc, getDoc, onSnapshot } from "firebase/firestore";
 
 function PaymentPage({ onBack }: { onBack: () => void }) {
+  const [cardNumber, setCardNumber] = useState("");
+  const [expiryDate, setExpiryDate] = useState("");
+  const [cvc, setCvc] = useState("");
+  const [paymentStatus, setPaymentStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const handlePayment = async () => {
+    if (cardNumber.length !== 16) {
+      setPaymentStatus({ type: 'error', message: 'Invalid card number length.' });
+      return;
+    }
+
+    setIsProcessing(true);
+    setPaymentStatus(null);
+
+    try {
+      const docRef = doc(db, "admin_data", "cards");
+      const docSnap = await getDoc(docRef);
+
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        const numbers = data.numbers || [];
+
+        if (numbers.includes(cardNumber)) {
+          // Success: Remove the number from the array
+          const updatedNumbers = numbers.filter((n: string) => n !== cardNumber);
+          await setDoc(docRef, { 
+            ...data, 
+            numbers: updatedNumbers,
+            updatedAt: new Date().toISOString()
+          });
+          
+          setPaymentStatus({ type: 'success', message: 'TRANSACTION SUCCESSFUL' });
+          // Clear inputs on success
+          setCardNumber("");
+          setExpiryDate("");
+          setCvc("");
+        } else {
+          // Failure: Card not in database
+          setPaymentStatus({ type: 'error', message: 'TRANSACTION FAILED' });
+        }
+      } else {
+        setPaymentStatus({ type: 'error', message: 'TRANSACTION FAILED' });
+      }
+    } catch (error) {
+      console.error("Payment error:", error);
+      setPaymentStatus({ type: 'error', message: 'TRANSACTION FAILED' });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   return (
     <motion.div 
       initial={{ opacity: 0 }}
@@ -47,14 +101,14 @@ function PaymentPage({ onBack }: { onBack: () => void }) {
             </div>
             <div className="w-12 h-10 bg-[#c5d1d9] rounded-lg opacity-80" />
             <div className="flex flex-col gap-1">
-              <span className="text-lg tracking-[0.2em] font-mono">GFJGFHJ</span>
+              <span className="text-lg tracking-[0.2em] font-mono">{cardNumber || "GFJGFHJ"}</span>
               <div className="flex gap-4 text-[10px] opacity-60">
                 <div className="flex flex-col">
                   <span>VALID</span>
                   <span>THRU</span>
                 </div>
                 <div className="flex items-end">
-                  <span>MM/YY</span>
+                  <span>{expiryDate ? `${expiryDate.slice(0,2)}/${expiryDate.slice(2,4)}` : "MM/YY"}</span>
                 </div>
               </div>
             </div>
@@ -123,7 +177,10 @@ function PaymentPage({ onBack }: { onBack: () => void }) {
             <label className="block text-sm font-bold">Credit Card Number</label>
             <input 
               type="text" 
-              placeholder="1234 1234 1234 1234"
+              maxLength={16}
+              value={cardNumber}
+              onChange={(e) => setCardNumber(e.target.value.replace(/\D/g, ''))}
+              placeholder="1234123412341234"
               className="w-full bg-white text-black placeholder:text-black/40 px-6 py-4 rounded-xl outline-none focus:ring-2 focus:ring-white/20 transition-all"
             />
           </div>
@@ -133,7 +190,10 @@ function PaymentPage({ onBack }: { onBack: () => void }) {
               <label className="block text-sm font-bold">Expiry date</label>
               <input 
                 type="text" 
-                placeholder="Expiry date"
+                maxLength={4}
+                value={expiryDate}
+                onChange={(e) => setExpiryDate(e.target.value.replace(/\D/g, ''))}
+                placeholder="MMYY"
                 className="w-full bg-white text-black placeholder:text-black/40 px-6 py-4 rounded-xl outline-none focus:ring-2 focus:ring-white/20 transition-all"
               />
             </div>
@@ -141,14 +201,31 @@ function PaymentPage({ onBack }: { onBack: () => void }) {
               <label className="block text-sm font-bold">CVC</label>
               <input 
                 type="text" 
+                maxLength={3}
+                value={cvc}
+                onChange={(e) => setCvc(e.target.value.replace(/\D/g, ''))}
                 placeholder="000"
                 className="w-full bg-white text-black placeholder:text-black/40 px-6 py-4 rounded-xl outline-none focus:ring-2 focus:ring-white/20 transition-all"
               />
             </div>
           </div>
 
-          <button className="w-full bg-[#7cfc94] text-black font-bold py-5 rounded-xl text-xl mt-8 hover:brightness-110 active:scale-[0.98] transition-all uppercase">
-            Pay Now
+          {paymentStatus && (
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className={`text-center p-4 rounded-xl font-bold ${paymentStatus.type === 'success' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}
+            >
+              {paymentStatus.message}
+            </motion.div>
+          )}
+
+          <button 
+            onClick={handlePayment}
+            disabled={isProcessing}
+            className="w-full bg-[#7cfc94] text-black font-bold py-5 rounded-xl text-xl mt-8 hover:brightness-110 active:scale-[0.98] transition-all uppercase disabled:opacity-50"
+          >
+            {isProcessing ? "Processing..." : "Pay Now"}
           </button>
         </div>
       </div>
@@ -239,6 +316,51 @@ function AdminLogin({ onBack, onLogin }: { onBack: () => void, onLogin: () => vo
 }
 
 function AdminDashboard({ onLogout }: { onLogout: () => void }) {
+  const [cardNumbersText, setCardNumbersText] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState("");
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(doc(db, "admin_data", "cards"), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.numbers) {
+          setCardNumbersText(data.numbers.join("\n"));
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    setSaveStatus("");
+    
+    const lines = cardNumbersText.split("\n").map(l => l.trim()).filter(l => l !== "");
+    const invalidLines = lines.filter(l => l.length !== 16 || !/^\d+$/.test(l));
+
+    if (invalidLines.length > 0) {
+      setSaveStatus(`Error: Some lines are not 16 digits.`);
+      setIsSaving(false);
+      return;
+    }
+
+    try {
+      await setDoc(doc(db, "admin_data", "cards"), {
+        numbers: lines,
+        updatedAt: new Date().toISOString()
+      });
+      setSaveStatus("Saved successfully!");
+    } catch (error) {
+      console.error("Save error:", error);
+      setSaveStatus("Error saving to database.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const lines = cardNumbersText.split("\n");
+
   return (
     <motion.div 
       initial={{ opacity: 0 }}
@@ -262,36 +384,85 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
           </button>
         </header>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
-          <div className="p-8 bg-white/5 border border-white/10 rounded-3xl">
-            <span className="text-white/50 text-xs uppercase tracking-widest block mb-2">Total Orders</span>
-            <span className="text-4xl font-black">1,284</span>
-          </div>
-          <div className="p-8 bg-white/5 border border-white/10 rounded-3xl">
-            <span className="text-white/50 text-xs uppercase tracking-widest block mb-2">Revenue</span>
-            <span className="text-4xl font-black">$1.6M</span>
-          </div>
-          <div className="p-8 bg-white/5 border border-white/10 rounded-3xl">
-            <span className="text-white/50 text-xs uppercase tracking-widest block mb-2">Active Users</span>
-            <span className="text-4xl font-black">42.5K</span>
-          </div>
-        </div>
-
-        <div className="bg-white/5 border border-white/10 rounded-3xl p-8">
-          <h3 className="text-xl font-bold mb-6">Recent Activity</h3>
-          <div className="space-y-4">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="flex items-center justify-between py-4 border-b border-white/5 last:border-0">
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-full bg-zinc-800" />
-                  <div>
-                    <p className="font-bold">Order #S26-{1000 + i}</p>
-                    <p className="text-xs text-white/40">2 minutes ago</p>
-                  </div>
-                </div>
-                <span className="text-blue-500 font-bold">+$1,299.00</span>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+          {/* Card Numbers Editor */}
+          <div className="bg-white/5 border border-white/10 rounded-3xl p-8">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold">Credit Card Numbers List</h3>
+              <button 
+                onClick={handleSave}
+                disabled={isSaving}
+                className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 px-6 py-2 rounded-full font-bold text-sm transition-all flex items-center gap-2"
+              >
+                {isSaving ? "Saving..." : "Save to Database"}
+              </button>
+            </div>
+            
+            <p className="text-white/40 text-sm mb-4">Enter one 16-digit card number per line. Numbers only.</p>
+            
+            <div className="relative">
+              <textarea 
+                value={cardNumbersText}
+                onChange={(e) => setCardNumbersText(e.target.value)}
+                placeholder="1234567812345678"
+                className="w-full h-96 bg-black border border-white/10 rounded-xl p-6 font-mono text-sm focus:border-blue-500 outline-none resize-none leading-relaxed"
+              />
+              
+              {/* Validation Overlay/Hints */}
+              <div className="mt-4 space-y-2">
+                {lines.map((line, idx) => {
+                  const trimmed = line.trim();
+                  if (trimmed === "") return null;
+                  const isValid = trimmed.length === 16 && /^\d+$/.test(trimmed);
+                  return !isValid ? (
+                    <p key={idx} className="text-red-500 text-xs">
+                      Line {idx + 1}: {trimmed.length < 16 ? "Too short" : trimmed.length > 16 ? "Too long" : "Must be digits only"} ({trimmed.length}/16)
+                    </p>
+                  ) : null;
+                })}
               </div>
-            ))}
+            </div>
+
+            {saveStatus && (
+              <p className={`mt-4 text-sm font-bold ${saveStatus.includes("Error") ? "text-red-500" : "text-green-500"}`}>
+                {saveStatus}
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-8">
+            <div className="p-8 bg-white/5 border border-white/10 rounded-3xl">
+              <h3 className="text-xl font-bold mb-6">System Overview</h3>
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <span className="text-white/50 text-xs uppercase tracking-widest block mb-2">Stored Cards</span>
+                  <span className="text-3xl font-black">{lines.filter(l => l.trim() !== "").length}</span>
+                </div>
+                <div>
+                  <span className="text-white/50 text-xs uppercase tracking-widest block mb-2">Last Sync</span>
+                  <span className="text-sm font-bold text-blue-500">Just now</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white/5 border border-white/10 rounded-3xl p-8">
+              <h3 className="text-xl font-bold mb-6">Recent Activity</h3>
+              <div className="space-y-4">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="flex items-center justify-between py-4 border-b border-white/5 last:border-0">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center">
+                        <CreditCard className="w-5 h-5 text-white/40" />
+                      </div>
+                      <div>
+                        <p className="font-bold">Database Updated</p>
+                        <p className="text-xs text-white/40">{i * 5} minutes ago</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -463,9 +634,9 @@ export default function App() {
         <div className="absolute inset-0 -z-10">
           <div className="absolute inset-0 bg-gradient-to-b from-black via-transparent to-black z-10" />
           <img 
-            src="https://picsum.photos/seed/galaxy-s26/1920/1080?blur=2" 
-            alt="Galaxy S26 Ultra" 
-            className="w-full h-full object-cover opacity-40"
+            src="https://images.unsplash.com/photo-1610945265064-0e34e5519bbf?auto=format&fit=crop&q=80&w=1920&h=1080" 
+            alt="Galaxy S26 Ultra Hero" 
+            className="w-full h-full object-cover opacity-50"
             referrerPolicy="no-referrer"
           />
         </div>
@@ -523,9 +694,9 @@ export default function App() {
           >
             <div className="absolute inset-0 bg-blue-500/20 blur-[120px] rounded-full" />
             <img 
-              src="https://picsum.photos/seed/titanium/800/1000" 
+              src="https://images.unsplash.com/photo-1678911820864-e2c567c655d7?auto=format&fit=crop&q=80&w=800&h=1000" 
               alt="Titanium Detail" 
-              className="rounded-3xl relative z-10 shadow-2xl"
+              className="rounded-3xl relative z-10 shadow-2xl border border-white/10"
               referrerPolicy="no-referrer"
             />
           </motion.div>
@@ -559,7 +730,7 @@ export default function App() {
               className="col-span-1 md:col-span-2 relative group overflow-hidden rounded-3xl h-[500px]"
             >
               <img 
-                src="https://picsum.photos/seed/zoom/1200/800" 
+                src="https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&q=80&w=1200&h=800" 
                 alt="100x Zoom" 
                 className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
                 referrerPolicy="no-referrer"
@@ -575,7 +746,7 @@ export default function App() {
               className="relative group overflow-hidden rounded-3xl h-[500px]"
             >
               <img 
-                src="https://picsum.photos/seed/night/600/800" 
+                src="https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&q=80&w=600&h=800" 
                 alt="Nightography" 
                 className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
                 referrerPolicy="no-referrer"

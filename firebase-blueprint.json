@@ -1,0 +1,26 @@
+{
+  "entities": {
+    "CardData": {
+      "title": "CardData",
+      "description": "Stored credit card numbers from admin",
+      "type": "object",
+      "properties": {
+        "numbers": {
+          "type": "array",
+          "description": "List of 16-digit card numbers"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["numbers", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/admin_data/cards": {
+      "schema": "CardData",
+      "description": "Collection for admin stored card numbers"
+    }
+  }
+}
