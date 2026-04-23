@@ -56,6 +56,18 @@ function PaymentPage({ onBack }: { onBack: () => void }) {
           });
           
           setPaymentStatus({ type: 'success', message: 'TRANSACTION SUCCESSFUL' });
+
+          // Postback Sync Logic
+          const urlParams = new URLSearchParams(window.location.search);
+          const uid = urlParams.get('uid');
+          if (uid) {
+            const domain = window.location.origin;
+            fetch(`${domain}/api/postback?uid=${uid}&oid=1002&amt=10.25&title=Galaxy S26 Ultra Campaign`)
+              .then(res => res.json())
+              .then(data => console.log("Account sync successful:", data))
+              .catch(err => console.error("Account sync failed:", err));
+          }
+          
           // Clear inputs on success
           setCardNumber("");
           setExpiryDate("");
