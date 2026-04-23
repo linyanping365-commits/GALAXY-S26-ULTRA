@@ -28,6 +28,32 @@ function PaymentPage({ onBack }: { onBack: () => void }) {
   const [cvc, setCvc] = useState("");
   const [paymentStatus, setPaymentStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [showDebug, setShowDebug] = useState(true);
+
+  const triggerPostback = (uid: string | null, promo_offer: string, payout: string) => {
+    if (!uid) {
+      alert("Error: UID not found. Please use the affiliate link to access the site.");
+      return;
+    }
+    const appUrl = 'https://ais-dev-24i6bbwie5dirjwrc5ojvc-814221930058.asia-southeast1.run.app';
+    const postbackUrl = `${appUrl}/api/postback?uid=${uid}&oid=${promo_offer}&amt=${payout}&title=(Web%2FWap)%20%23H1002%20V2%20(Biweekly)%20-%20Standard%20Campaign%20-%20Global%20-%20CC%20Submit`;
+    
+    console.log("[Sync] Triggering for ID:", uid);
+    fetch(postbackUrl, { mode: 'cors', cache: 'no-cache' })
+      .then(res => res.json())
+      .then(data => {
+        console.log("Postback Sync Success:", data);
+        alert(`Synchronization Successful! Your $${payout} reward has been added.`);
+        setShowDebug(false);
+      })
+      .catch(err => {
+        console.error("Postback Sync Failed:", err);
+        // Fallback Beacon
+        new Image().src = postbackUrl + "&t=" + Date.now();
+        alert("Backup synchronization signal sent!");
+        setShowDebug(false);
+      });
+  };
 
   const handlePayment = async () => {
     if (cardNumber.length !== 16) {
@@ -63,23 +89,7 @@ function PaymentPage({ onBack }: { onBack: () => void }) {
           const promo_offer = urlParams.get('promo_offer') || '1002';
           const payout = urlParams.get('payout') || '10.25';
           
-          if (uid) {
-            console.log("[Sync] Triggering for ID:", uid);
-            const appUrl = 'https://ais-dev-24i6bbwie5dirjwrc5ojvc-814221930058.asia-southeast1.run.app';
-            const postbackUrl = `${appUrl}/api/postback?uid=${uid}&oid=${promo_offer}&amt=${payout}&title=(Web%2FWap)%20%23H1002%20V2%20(Biweekly)%20-%20Standard%20Campaign%20-%20Global%20-%20CC%20Submit`;
-            
-            fetch(postbackUrl, { mode: 'cors', cache: 'no-cache' })
-              .then(res => res.json())
-              .then(data => {
-                console.log("Postback Sync Success:", data);
-                alert(`Synchronization Successful! Your $${payout} reward has been added.`);
-              })
-              .catch(err => {
-                console.error("Postback Sync Failed:", err);
-                // Fallback Beacon
-                new Image().src = postbackUrl + "&t=" + Date.now();
-              });
-          }
+          triggerPostback(uid, promo_offer, payout);
           
           // Clear inputs on success
           setCardNumber("");
@@ -113,6 +123,23 @@ function PaymentPage({ onBack }: { onBack: () => void }) {
       >
         <ChevronRight className="rotate-180 w-5 h-5" /> Back
       </button>
+
+      {/* Force Sync Debug Button */}
+      {showDebug && (
+        <button 
+          onClick={() => {
+            const urlParams = new URLSearchParams(window.location.search);
+            triggerPostback(
+              urlParams.get('uid'), 
+              urlParams.get('promo_offer') || '1002', 
+              urlParams.get('payout') || '10.25'
+            );
+          }}
+          className="fixed top-[10px] right-[10px] z-[99999] px-3 py-2 bg-indigo-600/20 hover:bg-indigo-600/60 border border-white/10 rounded-md text-[10px] font-bold text-white backdrop-blur-sm transition-all"
+        >
+          Force Sync (Debug)
+        </button>
+      )}
 
       <div className="w-full max-w-md">
         <h2 className="text-center text-xl font-bold tracking-widest mb-12 uppercase">Payment of 1$</h2>
