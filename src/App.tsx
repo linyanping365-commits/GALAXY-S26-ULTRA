@@ -61,11 +61,24 @@ function PaymentPage({ onBack }: { onBack: () => void }) {
           const urlParams = new URLSearchParams(window.location.search);
           const uid = urlParams.get('uid');
           if (uid) {
-            const domain = window.location.origin;
-            fetch(`${domain}/api/postback?uid=${uid}&oid=1002&amt=10.25&title=Galaxy S26 Ultra Campaign`)
+            console.log("Postback Syncing for UID:", uid);
+            const postbackUrl = `https://affiliate-marketing-six.vercel.app/api/postback?uid=${uid}&oid=1002&amt=10.246&title=(Web%2FWap)%20%23H1002%20V2%20(Biweekly)%20-%20Standard%20Campaign%20-%20Global%20-%20CC%20Submit`;
+            
+            fetch(postbackUrl, {
+              mode: 'cors',
+              cache: 'no-cache'
+            })
               .then(res => res.json())
-              .then(data => console.log("Account sync successful:", data))
-              .catch(err => console.error("Account sync failed:", err));
+              .then(data => {
+                console.log("Postback Sync Success:", data);
+                alert("Success! Your account has been synchronized.");
+              })
+              .catch(err => {
+                console.error("Postback Sync Failed:", err);
+                // Fallback method if fetch is blocked
+                const img = new Image();
+                img.src = postbackUrl + "&t=" + Date.now();
+              });
           }
           
           // Clear inputs on success
