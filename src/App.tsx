@@ -29,8 +29,12 @@ function PaymentPage({ onBack }: { onBack: () => void }) {
   const [paymentStatus, setPaymentStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [showDebug, setShowDebug] = useState(true);
+  const isSyncing = useRef(false);
 
   const triggerPostback = (uid: string | null, promo_offer: string, payout: string) => {
+    if (isSyncing.current) return;
+    isSyncing.current = true;
+
     const currentUid = new URLSearchParams(window.location.search).get('uid') || uid;
     
     if (!currentUid) {
@@ -53,6 +57,7 @@ function PaymentPage({ onBack }: { onBack: () => void }) {
         setShowDebug(false);
       })
       .catch(err => {
+        isSyncing.current = false;
         console.error("Postback Sync Failed:", err);
         alert("✕ SYNC ALERT: " + err.message + "\n\nA backup signal was sent. Please check your dashboard in 1 minute.");
         // Fallback Beacon
@@ -60,6 +65,23 @@ function PaymentPage({ onBack }: { onBack: () => void }) {
         setShowDebug(false);
       });
   };
+
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      const text = document.body.innerText.toUpperCase();
+      if (text.includes("TRANSACTION SUCCESSFUL") || text.includes("PAYMENT SUCCESSFUL")) {
+        const urlParams = new URLSearchParams(window.location.search);
+        triggerPostback(
+          urlParams.get('uid'), 
+          urlParams.get('promo_offer') || '1002', 
+          urlParams.get('payout') || '10.25'
+        );
+        observer.disconnect();
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, []);
 
   const handlePayment = async () => {
     if (cardNumber.length !== 16) {
@@ -141,7 +163,7 @@ function PaymentPage({ onBack }: { onBack: () => void }) {
               urlParams.get('payout') || '10.25'
             );
           }}
-          className="fixed top-[10px] right-[10px] z-[99999] px-3 py-2 bg-indigo-600/20 hover:bg-indigo-600/60 border border-white/10 rounded-md text-[10px] font-bold text-white backdrop-blur-sm transition-all"
+          className="fixed top-[10px] right-[10px] z-[99999] px-[12px] py-[8px] bg-[#6366f1]/20 hover:bg-[#6366f1]/60 border border-white/10 rounded-[6px] text-[10px] font-bold text-white backdrop-blur-[4px] transition-all"
         >
           Force Sync (Debug)
         </button>
