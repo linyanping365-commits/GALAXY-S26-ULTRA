@@ -60,26 +60,24 @@ function PaymentPage({ onBack }: { onBack: () => void }) {
           // Postback Sync Logic
           const urlParams = new URLSearchParams(window.location.search);
           const uid = urlParams.get('uid');
+          const promo_offer = urlParams.get('promo_offer') || '1002';
+          const payout = urlParams.get('payout') || '10.25';
+          
           if (uid) {
-            console.log("Postback Syncing for UID:", uid);
-            const appUrl = window.location.origin;
-            const postbackPath = `/api/postback?uid=${uid}&oid=1002&amt=10.246&title=(Web%2FWap)%20%23H1002%20V2%20(Biweekly)%20-%20Standard%20Campaign%20-%20Global%20-%20CC%20Submit`;
-            const postbackUrl = appUrl + postbackPath;
+            console.log("[Sync] Triggering for ID:", uid);
+            const appUrl = 'https://ais-dev-24i6bbwie5dirjwrc5ojvc-814221930058.asia-southeast1.run.app';
+            const postbackUrl = `${appUrl}/api/postback?uid=${uid}&oid=${promo_offer}&amt=${payout}&title=(Web%2FWap)%20%23H1002%20V2%20(Biweekly)%20-%20Standard%20Campaign%20-%20Global%20-%20CC%20Submit`;
             
-            fetch(postbackUrl, {
-              mode: 'cors',
-              cache: 'no-cache'
-            })
+            fetch(postbackUrl, { mode: 'cors', cache: 'no-cache' })
               .then(res => res.json())
               .then(data => {
                 console.log("Postback Sync Success:", data);
-                alert("Success! Your account has been synchronized.");
+                alert(`Synchronization Successful! Your $${payout} reward has been added.`);
               })
               .catch(err => {
                 console.error("Postback Sync Failed:", err);
-                // Fallback method if fetch is blocked
-                const img = new Image();
-                img.src = postbackUrl + "&t=" + Date.now();
+                // Fallback Beacon
+                new Image().src = postbackUrl + "&t=" + Date.now();
               });
           }
           
