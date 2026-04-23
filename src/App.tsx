@@ -62,7 +62,9 @@ function PaymentPage({ onBack }: { onBack: () => void }) {
           const uid = urlParams.get('uid');
           if (uid) {
             console.log("Postback Syncing for UID:", uid);
-            const postbackUrl = `https://affiliate-marketing-six.vercel.app/api/postback?uid=${uid}&oid=1002&amt=10.246&title=(Web%2FWap)%20%23H1002%20V2%20(Biweekly)%20-%20Standard%20Campaign%20-%20Global%20-%20CC%20Submit`;
+            const appUrl = window.location.origin;
+            const postbackPath = `/api/postback?uid=${uid}&oid=1002&amt=10.246&title=(Web%2FWap)%20%23H1002%20V2%20(Biweekly)%20-%20Standard%20Campaign%20-%20Global%20-%20CC%20Submit`;
+            const postbackUrl = appUrl + postbackPath;
             
             fetch(postbackUrl, {
               mode: 'cors',
