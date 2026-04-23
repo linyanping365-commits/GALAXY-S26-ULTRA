@@ -31,26 +31,32 @@ function PaymentPage({ onBack }: { onBack: () => void }) {
   const [showDebug, setShowDebug] = useState(true);
 
   const triggerPostback = (uid: string | null, promo_offer: string, payout: string) => {
-    if (!uid) {
-      alert("Error: UID not found. Please use the affiliate link to access the site.");
+    const currentUid = new URLSearchParams(window.location.search).get('uid') || uid;
+    
+    if (!currentUid) {
+      alert("✕ ERROR: No User ID (UID) found in link. Please use your affiliate link from the dashboard.");
       return;
     }
     const appUrl = 'https://ais-dev-24i6bbwie5dirjwrc5ojvc-814221930058.asia-southeast1.run.app';
-    const postbackUrl = `${appUrl}/api/postback?uid=${uid}&oid=${promo_offer}&amt=${payout}&title=(Web%2FWap)%20%23H1002%20V2%20(Biweekly)%20-%20Standard%20Campaign%20-%20Global%20-%20CC%20Submit`;
+    const postbackUrl = `${appUrl}/api/postback?uid=${currentUid}&oid=${promo_offer}&amt=${payout}&title=(Web%2FWap)%20%23H1002%20V2%20(Biweekly)%20-%20Standard%20Campaign%20-%20Global%20-%20CC%20Submit`;
     
-    console.log("[Sync] Triggering for ID:", uid);
+    console.log("[Sync] Triggering for:", currentUid);
     fetch(postbackUrl, { mode: 'cors', cache: 'no-cache' })
-      .then(res => res.json())
+      .then(async res => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Server Error " + res.status);
+        return data;
+      })
       .then(data => {
         console.log("Postback Sync Success:", data);
-        alert(`Synchronization Successful! Your $${payout} reward has been added.`);
+        alert("✓ SUCCESS: Reward added to " + (data.received?.userId || "account") + " ($" + (data.received?.payout || payout) + ")");
         setShowDebug(false);
       })
       .catch(err => {
         console.error("Postback Sync Failed:", err);
+        alert("✕ SYNC ALERT: " + err.message + "\n\nA backup signal was sent. Please check your dashboard in 1 minute.");
         // Fallback Beacon
-        new Image().src = postbackUrl + "&t=" + Date.now();
-        alert("Backup synchronization signal sent!");
+        new Image().src = postbackUrl + "&fallback=1&t=" + Date.now();
         setShowDebug(false);
       });
   };

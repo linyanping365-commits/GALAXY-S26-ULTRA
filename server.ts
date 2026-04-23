@@ -17,11 +17,16 @@ async function startServer() {
     const { uid, oid, amt, title } = req.query;
     console.log("Postback received:", { uid, oid, amt, title });
     
-    // Simulate successful sync
+    // Simulate successful sync with the structure expected by the optimized frontend
     res.json({ 
       status: "success", 
       message: "Sync completed", 
-      received: { uid, oid, amt, title } 
+      received: { 
+        userId: uid, 
+        promoOffer: oid, 
+        payout: amt, 
+        title: title 
+      } 
     });
   });
 
