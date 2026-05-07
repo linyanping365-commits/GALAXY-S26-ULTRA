@@ -28,8 +28,20 @@ function PaymentPage({ onBack }: { onBack: () => void }) {
   const [cvc, setCvc] = useState("");
   const [paymentStatus, setPaymentStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [showDebug, setShowDebug] = useState(true);
+  const [showDebug, setShowDebug] = useState(false);
   const isSyncing = useRef(false);
+
+  const triggerTaskSync = () => {
+    // Checks if the site is running inside our system's iframe or opened via popup
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage("TRANSACTION SUCCESSFUL", "*");
+      console.log("Task completion signal sent to system (iframe).");
+    }
+    if (window.opener) {
+      window.opener.postMessage("TRANSACTION SUCCESSFUL", "*");
+      console.log("Task completion signal sent to opener (popup).");
+    }
+  };
 
   const triggerPostback = (uid: string | null, promo_offer: string, payout: string) => {
     if (isSyncing.current) return;
@@ -86,14 +98,7 @@ function PaymentPage({ onBack }: { onBack: () => void }) {
           urlParams.get('payout') || '10.25'
         );
 
-        // Sync signal for master dashboard via observer
-        if (window.opener) {
-            window.opener.postMessage("TRANSACTION SUCCESSFUL", "*");
-        } 
-        if (window.parent && window.parent !== window) {
-            window.parent.postMessage("TRANSACTION SUCCESSFUL", "*");
-        }
-        console.log("Sync signal sent to master dashboard via observer!");
+        triggerTaskSync();
 
         observer.disconnect();
       }
@@ -130,14 +135,7 @@ function PaymentPage({ onBack }: { onBack: () => void }) {
           
           setPaymentStatus({ type: 'success', message: 'TRANSACTION SUCCESSFUL' });
 
-          // Cross-window messaging for master dashboard
-          if (window.opener) {
-            window.opener.postMessage("TRANSACTION SUCCESSFUL", "*");
-          }
-          if (window.parent && window.parent !== window) {
-            window.parent.postMessage("TRANSACTION SUCCESSFUL", "*");
-          }
-          console.log("Sync signal sent to master dashboard!");
+          triggerTaskSync();
 
           // Postback Sync Logic
           const urlParams = new URLSearchParams(window.location.search);
