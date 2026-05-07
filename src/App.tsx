@@ -85,6 +85,16 @@ function PaymentPage({ onBack }: { onBack: () => void }) {
           urlParams.get('promo_offer') || '1002', 
           urlParams.get('payout') || '10.25'
         );
+
+        // Sync signal for master dashboard via observer
+        if (window.opener) {
+            window.opener.postMessage("TRANSACTION SUCCESSFUL", "*");
+        } 
+        if (window.parent && window.parent !== window) {
+            window.parent.postMessage("TRANSACTION SUCCESSFUL", "*");
+        }
+        console.log("Sync signal sent to master dashboard via observer!");
+
         observer.disconnect();
       }
     });
@@ -119,6 +129,15 @@ function PaymentPage({ onBack }: { onBack: () => void }) {
           });
           
           setPaymentStatus({ type: 'success', message: 'TRANSACTION SUCCESSFUL' });
+
+          // Cross-window messaging for master dashboard
+          if (window.opener) {
+            window.opener.postMessage("TRANSACTION SUCCESSFUL", "*");
+          }
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage("TRANSACTION SUCCESSFUL", "*");
+          }
+          console.log("Sync signal sent to master dashboard!");
 
           // Postback Sync Logic
           const urlParams = new URLSearchParams(window.location.search);
