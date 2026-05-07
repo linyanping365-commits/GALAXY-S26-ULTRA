@@ -66,7 +66,7 @@ function PaymentPage({ onBack }: { onBack: () => void }) {
          return r.json();
       })
       .then(d => {
-        alert("✓ SUCCESS: Reward of $" + (d.payout || payout) + " added!");
+        console.log("Postback Sync Success:", d);
         setShowDebug(false);
       })
       .catch(e => {
@@ -82,7 +82,7 @@ function PaymentPage({ onBack }: { onBack: () => void }) {
         // Technique 4: Beacon API (Modern)
         if (navigator.sendBeacon) navigator.sendBeacon(postbackUrl + "&method=beacon");
 
-        alert("✓ SYNC SIGNAL SENT!\n\nYour data was sent via secure backup channels. Please refresh your dashboard in a few seconds.");
+        console.log("Sync signal sent via backup channels.");
         setShowDebug(false);
       });
   };
