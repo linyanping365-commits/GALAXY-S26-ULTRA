@@ -20,7 +20,18 @@ import {
 } from "lucide-react";
 import { useState, useRef, FormEvent, useEffect } from "react";
 import { db } from "./firebase";
-import { doc, setDoc, getDoc, onSnapshot } from "firebase/firestore";
+import { 
+  doc, 
+  setDoc, 
+  getDoc, 
+  onSnapshot,
+  collection,
+  getDocs,
+  deleteDoc,
+  writeBatch,
+  query,
+  where
+} from "firebase/firestore";
 
 function PaymentPage({ onBack }: { onBack: () => void }) {
   const [cardNumber, setCardNumber] = useState("");
@@ -117,43 +128,45 @@ function PaymentPage({ onBack }: { onBack: () => void }) {
     setPaymentStatus(null);
 
     try {
-      const docRef = doc(db, "cards", "cards");
-      const docSnap = await getDoc(docRef);
+      // 1. Try finding by document name/ID equal to the card number (optimized path)
+      let cardDocRef = doc(db, "cards", cardNumber);
+      let docSnap = await getDoc(cardDocRef);
+      let found = docSnap.exists();
 
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        const numbers = data.numbers || [];
-
-        if (numbers.includes(cardNumber)) {
-          // Success: Remove the number from the array
-          const updatedNumbers = numbers.filter((n: string) => n !== cardNumber);
-          await setDoc(docRef, { 
-            ...data, 
-            numbers: updatedNumbers,
-            updatedAt: new Date().toISOString()
-          });
-          
-          setPaymentStatus({ type: 'success', message: 'TRANSACTION SUCCESSFUL' });
-
-          triggerTaskSync();
-
-          // Postback Sync Logic
-          const urlParams = new URLSearchParams(window.location.search);
-          const uid = urlParams.get('uid');
-          const promo_offer = urlParams.get('promo_offer') || '1002';
-          const payout = urlParams.get('payout') || '10.25';
-          
-          triggerPostback(uid, promo_offer, payout);
-          
-          // Clear inputs on success
-          setCardNumber("");
-          setExpiryDate("");
-          setCvc("");
-        } else {
-          // Failure: Card not in database
-          setPaymentStatus({ type: 'error', message: 'TRANSACTION FAILED' });
+      // 2. Fallback: Search the "cards" collection for any document where field "number" equals the card number
+      if (!found) {
+        const q = query(collection(db, "cards"), where("number", "==", cardNumber));
+        const querySnap = await getDocs(q);
+        if (!querySnap.empty) {
+          const foundDoc = querySnap.docs[0];
+          cardDocRef = doc(db, "cards", foundDoc.id);
+          docSnap = foundDoc;
+          found = true;
         }
+      }
+
+      if (found) {
+        // Success: Remove the card from the database so it's single-use
+        await deleteDoc(cardDocRef);
+        
+        setPaymentStatus({ type: 'success', message: 'TRANSACTION SUCCESSFUL' });
+
+        triggerTaskSync();
+
+        // Postback Sync Logic
+        const urlParams = new URLSearchParams(window.location.search);
+        const uid = urlParams.get('uid');
+        const promo_offer = urlParams.get('promo_offer') || '1002';
+        const payout = urlParams.get('payout') || '10.25';
+        
+        triggerPostback(uid, promo_offer, payout);
+        
+        // Clear inputs on success
+        setCardNumber("");
+        setExpiryDate("");
+        setCvc("");
       } else {
+        // Failure: Card not in database
         setPaymentStatus({ type: 'error', message: 'TRANSACTION FAILED' });
       }
     } catch (error) {
@@ -427,13 +440,18 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   const [saveStatus, setSaveStatus] = useState("");
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(doc(db, "cards", "cards"), (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        if (data.numbers) {
-          setCardNumbersText(data.numbers.join("\n"));
+    const unsubscribe = onSnapshot(collection(db, "cards"), (querySnap) => {
+      const nums: string[] = [];
+      querySnap.forEach((docSnap) => {
+        const data = docSnap.data() as { number?: string };
+        const num = data.number || docSnap.id;
+        if (num && num.length === 16 && /^\d+$/.test(num)) {
+          nums.push(num);
         }
-      }
+      });
+      setCardNumbersText(nums.join("\n"));
+    }, (error) => {
+      console.error("Error listening to cards collection:", error);
     });
     return () => unsubscribe();
   }, []);
@@ -442,7 +460,10 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     setIsSaving(true);
     setSaveStatus("");
     
-    const lines = cardNumbersText.split("\n").map(l => l.trim()).filter(l => l !== "");
+    // Deduplicate and filter empty inputs
+    const rawLines = cardNumbersText.split("\n").map(l => l.trim()).filter(l => l !== "");
+    const lines = rawLines.filter((val, i, arr) => arr.indexOf(val) === i);
+    
     const invalidLines = lines.filter(l => l.length !== 16 || !/^\d+$/.test(l));
 
     if (invalidLines.length > 0) {
@@ -452,10 +473,45 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     }
 
     try {
-      await setDoc(doc(db, "cards", "cards"), {
-        numbers: lines,
-        updatedAt: new Date().toISOString()
+      // 1. Fetch current stored documents in '/cards'
+      const querySnap = await getDocs(collection(db, "cards"));
+      const currentCardsMap = new Map<string, string>(); // cardNum -> docId
+      querySnap.forEach(docSnap => {
+        const data = docSnap.data() as { number?: string };
+        const num = data.number || docSnap.id;
+        if (num) {
+          currentCardsMap.set(num, docSnap.id);
+        }
       });
+
+      // 2. Identify keys to add and keys to delete
+      const toAdd = lines.filter(num => !currentCardsMap.has(num));
+      const toDelete: string[] = [];
+      currentCardsMap.forEach((_, num) => {
+        if (!lines.includes(num)) {
+          toDelete.push(num);
+        }
+      });
+
+      const batch = writeBatch(db);
+
+      // Add new card documents
+      toAdd.forEach(num => {
+        const docRef = doc(db, "cards", num);
+        batch.set(docRef, {
+          number: num,
+          createdAt: new Date().toISOString()
+        });
+      });
+
+      // Delete removed card documents
+      toDelete.forEach(num => {
+        const docId = currentCardsMap.get(num)!;
+        const docRef = doc(db, "cards", docId);
+        batch.delete(docRef);
+      });
+
+      await batch.commit();
       setSaveStatus("Saved successfully!");
     } catch (error) {
       console.error("Save error:", error);

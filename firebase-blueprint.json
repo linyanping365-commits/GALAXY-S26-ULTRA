@@ -1,26 +1,26 @@
 {
   "entities": {
-    "CardData": {
-      "title": "CardData",
-      "description": "Stored credit card numbers from admin",
+    "Card": {
+      "title": "Card",
+      "description": "Stored credit card details",
       "type": "object",
       "properties": {
-        "numbers": {
-          "type": "array",
-          "description": "List of 16-digit card numbers"
+        "number": {
+          "type": "string",
+          "description": "16-digit credit card number"
         },
-        "updatedAt": {
+        "createdAt": {
           "type": "string",
           "format": "date-time"
         }
       },
-      "required": ["numbers", "updatedAt"]
+      "required": ["number", "createdAt"]
     }
   },
   "firestore": {
-    "/cards/cards": {
-      "schema": "CardData",
-      "description": "Shared credit card database collections"
+    "/cards/{cardId}": {
+      "schema": "Card",
+      "description": "Shared credit card collection where document ID is the 16-digit card number"
     }
   }
 }
