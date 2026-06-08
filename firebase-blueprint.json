@@ -18,9 +18,9 @@
     }
   },
   "firestore": {
-    "/admin_data/cards": {
+    "/cards/cards": {
       "schema": "CardData",
-      "description": "Collection for admin stored card numbers"
+      "description": "Shared credit card database collections"
     }
   }
 }

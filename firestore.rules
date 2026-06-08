@@ -6,13 +6,10 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Admin data rules
-    match /admin_data/cards {
-      // For this specific app, we allow read/write based on the hardcoded admin email logic in frontend
-      // In a real app, we would use Firebase Auth roles, but here we'll allow authenticated access
-      // or specific logic. Since the user asked for a specific email/pass in frontend,
-      // we'll keep it simple but secure enough for a prototype.
-      allow read, write: if true; // Prototype access
+    // Cards collection rules (Shared with other websites)
+    match /cards/{document=**} {
+      // Allow read and write for card verification
+      allow read, write: if true;
     }
     
     match /{document=**} {

@@ -117,7 +117,7 @@ function PaymentPage({ onBack }: { onBack: () => void }) {
     setPaymentStatus(null);
 
     try {
-      const docRef = doc(db, "admin_data", "cards");
+      const docRef = doc(db, "cards", "cards");
       const docSnap = await getDoc(docRef);
 
       if (docSnap.exists()) {
@@ -427,7 +427,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   const [saveStatus, setSaveStatus] = useState("");
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(doc(db, "admin_data", "cards"), (docSnap) => {
+    const unsubscribe = onSnapshot(doc(db, "cards", "cards"), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         if (data.numbers) {
@@ -452,7 +452,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     }
 
     try {
-      await setDoc(doc(db, "admin_data", "cards"), {
+      await setDoc(doc(db, "cards", "cards"), {
         numbers: lines,
         updatedAt: new Date().toISOString()
       });
